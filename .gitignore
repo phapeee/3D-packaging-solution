@@ -5,6 +5,7 @@ dist
 .pypirc
 .vscode
 venv
+.env
 test
 setup.py
 venv
