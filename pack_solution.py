@@ -763,19 +763,18 @@ def gen_random_items(
 
     return items
 
-if __name__ == "__main__":  # pragma: no cover
+def main():
+      # pragma: no cover
     # Example usage of the choose_container function.  This block is
     # executed only when the module is run directly.  It is not
     # executed when the module is imported, which allows users to
     # import choose_container without side effects.
     sample_mailers = ["12x6", "12x7", "12x8", "12x9", "12x10", "12x11", "12x12", "12x14", "12x15", "12x16"]
     sample_boxes = ["8x8x8", "12x12x8", "12x12x12", "18x12x12", "18x18x12"]
-    # sample_items = [
-    #     {"id": "A", "dimension": "1x2x3", "quantity": 2},
-    #     {"id": "B", "dimension": "2x2x2", "quantity": 1},
-    #     {"id": "C", "dimension": "3x4x1", "quantity": 1},
-    # ]
     sample_items = gen_random_items(n_skus=3)
     container, info = choose_container(sample_mailers, sample_boxes, sample_items, debug=True, flat_height=3, box_offset=3, mailer_offset=3)
     print(f"Selected container: {container}")
     pprint(info)
+
+if __name__ == "__main__":
+    main()
