@@ -84,7 +84,7 @@ class ItemInstance:
     """
 
     id: str
-    dims: Tuple[int, int, int]
+    dims: Tuple[float, float, float]
 
 
 def parse_dims(dim_str: str) -> Tuple[int, ...]:
@@ -105,6 +105,26 @@ def parse_dims(dim_str: str) -> Tuple[int, ...]:
     if not parts or any(not p.isdigit() for p in parts):
         raise ValueError(f"Invalid dimension string: {dim_str}")
     return tuple(int(p) for p in parts)
+
+def parse_dims_float(dim_str: str) -> Tuple[float, ...]:
+    """Parse a dimension string of the form ``"a x b x c"`` into a tuple of floats.
+
+    Parameters
+    ----------
+    dim_str : str
+        Dimension string (case insensitive) using ``x`` as a separator.
+
+    Returns
+    -------
+    Tuple[float, ...]
+        The dimensions as floats in the order encountered in the
+        string. Spaces are ignored.
+    """
+    parts = dim_str.lower().replace(" ", "").split("x")
+    try:
+        return tuple(float(p) for p in parts)
+    except ValueError:
+        raise ValueError(f"Invalid dimension string: {dim_str}")
 
 
 def sort_mailers(mailers: List[str]) -> List[Tuple[int, int, str]]:
@@ -192,7 +212,7 @@ def generate_item_instances(items: List[Dict[str, Any]]) -> List[ItemInstance]:
     """
     instances: List[ItemInstance] = []
     for itm in items:
-        dims_raw = parse_dims(itm["dimension"])
+        dims_raw = parse_dims_float(itm["dimension"])
         if len(dims_raw) != 3:
             raise ValueError(f"Items must have three dimensions, got {itm}")
         # store dimensions in ascending order for easier orientation
@@ -203,7 +223,7 @@ def generate_item_instances(items: List[Dict[str, Any]]) -> List[ItemInstance]:
 
 
 def can_fit_in_mailer(
-    items: List[ItemInstance], mailer_width: int, mailer_length: int
+    items: List[ItemInstance], mailer_width: int, mailer_length: int, flat_height: int
 ) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
     """Attempt to pack items into a single padded mailer.
 
@@ -722,7 +742,7 @@ def choose_container(
     # Try padded mailers first.
     for width, length, m_string in sort_mailers(padded_mailers):
         fits, placement = can_fit_in_mailer(
-            item_instances, width - mailer_offset, length - mailer_offset
+            item_instances, width - mailer_offset, length - mailer_offset, flat_height=flat_height,
         )
         if fits:
             if debug:

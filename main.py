@@ -84,6 +84,9 @@ def _validate_payload(data: Dict[str, Any]) -> Dict[str, Any]:
         "mailer_offset": mailer_offset,
     }
 
+@app.route("/healthz", methods=["GET"])
+def healthz():
+    return jsonify({"status": "ok"})
 
 @app.route("/solve", methods=["POST"])
 def solve():
