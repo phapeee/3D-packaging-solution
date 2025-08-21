@@ -221,108 +221,133 @@ def generate_item_instances(items: List[Dict[str, Any]]) -> List[ItemInstance]:
             instances.append(ItemInstance(id=itm["id"], dims=dims_sorted))
     return instances
 
-
 def can_fit_in_mailer(
-    items: List[ItemInstance], mailer_width: int, mailer_length: int, flat_height: int
+    items: List[ItemInstance],
+    mailer_width: float,
+    mailer_length: float,
+    flat_height: float
 ) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
-    """Attempt to pack items into a single padded mailer.
-
-    A padded mailer is treated as a 2D rectangle with fixed height
-    (four inches).  Items may not be stacked, therefore their
-    smallest dimension (thickness) must not exceed four.  The helper
-    uses a simple shelf algorithm to place rectangles on the x‑y plane.
-    Each item can be rotated in the plane, so the two largest
-    dimensions of each item become the potential width/length.  The
-    mailer is represented with the smaller dimension as the width and
-    the larger as the length.  Items are sorted by descending maximum
-    side before placement to improve packing efficiency.
-
-    Parameters
-    ----------
-    items: List[ItemInstance]
-        List of individual items to be placed.
-    mailer_width: int
-        Width of the mailer (smaller of the two supplied dimensions).
-    mailer_length: int
-        Length of the mailer (larger of the two supplied dimensions).
-
-    Returns
-    -------
-    Tuple[bool, Optional[List[Dict[str, Any]]]]
-        A boolean indicating whether all items fit, and if so a list
-        describing the placement of each item.  Each placement
-        dictionary contains the original :class:`ItemInstance`, the
-        orientation used (0 means largest dimension along x, 1 means
-        along y) and the ``x``/``y`` position of the lower left
-        corner within the mailer.  The placement list is ordered
-        according to the sort order used during placement, not
-        necessarily the original input order.
     """
-    # Filter out items that are too thick for the mailer.
+    Attempt to pack items into a padded mailer allowing stacking (layering in z).
+
+    - X = width, Y = length of the mailer footprint.
+    - Items' smallest dimension (dims[0]) is their thickness (z).
+    - We pack items into rows (shelves) within a layer (z = constant).
+    - When no more room in current layer, start a new layer if total height allows.
+    - A layer's height equals the max thickness of the items placed in that layer.
+    """
+    # All items must individually fit within the mailer's height
     for inst in items:
-        if inst.dims[0] > 4:
+        if inst.dims[0] > flat_height:
             return False, None
-    # Sort items by descending area (largest face) then by max side.
-    # dims are sorted ascending, so dims[2]*dims[1] is the area of the
-    # two largest sides.
+
+    # Sort by descending face area (largest footprint first), then max side
     items_sorted = sorted(
         items, key=lambda it: (it.dims[2] * it.dims[1], it.dims[2]), reverse=True
     )
+
     placements: List[Dict[str, Any]] = []
-    y_offset = 0
-    row_height = 0
-    row_width = 0
-    for inst in items_sorted:
-        placed = False
-        # orientation 0: width=dims[2], length=dims[1]; orientation 1: width=dims[1], length=dims[2]
+
+    # Current layer bookkeeping
+    z_offset: float = 0.0          # where this layer starts
+    layer_height: float = 0.0      # max thickness in this layer
+
+    # Within-layer shelf packing
+    y_offset: float = 0.0          # start of current row within the layer
+    row_height: float = 0.0        # max Y of the current row
+    row_width: float = 0.0         # used X within the current row
+
+    def try_place_in_current_layer(inst: ItemInstance) -> Optional[Dict[str, Any]]:
+        """Try place 'inst' in current row, else new row, within this layer."""
+        nonlocal row_width, row_height, y_offset
+
+        t = inst.dims[0]  # thickness (z)
+        # orientation 0: width=dims[2], length=dims[1]; orientation 1 swapped
         orientations = [
             (inst.dims[2], inst.dims[1], 0),
             (inst.dims[1], inst.dims[2], 1),
         ]
-        for width_i, length_i, orientation_flag in orientations:
-            # try to place in current row
+
+        # Try current row
+        for w_i, l_i, ori in orientations:
             if (
-                row_width + width_i <= mailer_width
-                and length_i <= mailer_length - y_offset
+                row_width + w_i <= mailer_width
+                and l_i <= (mailer_length - y_offset)
             ):
-                placements.append(
-                    {
-                        "item": inst,
-                        "orientation": orientation_flag,
-                        "position": (row_width, y_offset),
-                        "width": width_i,
-                        "length": length_i,
-                    }
-                )
-                row_width += width_i
-                row_height = max(row_height, length_i)
-                placed = True
-                break
-        if not placed:
-            # start a new row
-            y_offset += row_height
-            # reset row
-            row_width = 0
-            row_height = 0
-            # Check if there is enough remaining length for the item.
-            # Try orientations again.
-            for width_i, length_i, orientation_flag in orientations:
-                if width_i <= mailer_width and length_i <= mailer_length - y_offset:
-                    placements.append(
-                        {
-                            "item": inst,
-                            "orientation": orientation_flag,
-                            "position": (row_width, y_offset),
-                            "width": width_i,
-                            "length": length_i,
-                        }
-                    )
-                    row_width += width_i
-                    row_height = max(row_height, length_i)
-                    placed = True
-                    break
-            if not placed:
+                pos = (row_width, y_offset)
+                row_width += w_i
+                row_height = max(row_height, l_i)
+                return {
+                    "item": inst,
+                    "orientation": ori,
+                    "position": pos,
+                    "width": w_i,
+                    "length": l_i,
+                    "z": z_offset,
+                    "height": t,
+                }
+
+        # Start a new row in this layer
+        y_offset += row_height
+        row_width = 0.0
+        row_height = 0.0
+
+        for w_i, l_i, ori in orientations:
+            if w_i <= mailer_width and l_i <= (mailer_length - y_offset):
+                pos = (row_width, y_offset)
+                row_width += w_i
+                row_height = max(row_height, l_i)
+                return {
+                    "item": inst,
+                    "orientation": ori,
+                    "position": pos,
+                    "width": w_i,
+                    "length": l_i,
+                    "z": z_offset,
+                    "height": t,
+                }
+
+        return None  # doesn't fit in this layer's X/Y
+
+    for inst in items_sorted:
+        t = inst.dims[0]  # thickness
+
+        # If this is the very first item (or a new layer just began), initialize layer
+        if layer_height == 0.0 and row_height == 0.0 and row_width == 0.0:
+            # Ensure it can start a new (empty) layer height-wise
+            if z_offset + t > flat_height:
                 return False, None
+
+        placed = try_place_in_current_layer(inst)
+
+        if placed is not None:
+            placements.append(placed)
+            layer_height = max(layer_height, t)
+            continue
+
+        # Need a new layer: advance z by current layer height, reset XY shelf state
+        if layer_height == 0.0:
+            # No space in empty layer means item footprint exceeds mailer footprint
+            return False, None
+
+        z_offset += layer_height
+        if z_offset + t > flat_height:
+            return False, None  # not enough height to start a new layer
+
+        # Reset layer XY
+        y_offset = 0.0
+        row_height = 0.0
+        row_width = 0.0
+        layer_height = 0.0  # will be set from items placed in this fresh layer
+
+        placed = try_place_in_current_layer(inst)
+        if placed is None:
+            # Even a fresh layer can't fit footprint-wise
+            return False, None
+
+        placements.append(placed)
+        layer_height = max(layer_height, t)
+
     return True, placements
 
 
