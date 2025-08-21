@@ -573,7 +573,8 @@ def visualise_mailer_solution(
         dz = inst.dims[0]
         x, y = placement["position"]
         color = cmap(idx % 20)
-        draw_cuboid(ax, (x, y, 0), (dx, dy, dz), color=color, label=inst.id)
+        z = float(placement.get("z", 0.0))
+        draw_cuboid(ax, (x, y, z), (dx, dy, dz), color=color, label=inst.id)
 
     # ---- Outer wireframe (offset only in X & Y; height unchanged) ----
     ox, oy = _to_offset2(mailer_offset / 2)
@@ -692,17 +693,18 @@ def visualise_individual_items(items: List[ItemInstance]) -> None:
 
 
 def mailer_arrangement_json(placements):
-    """Convert internal placement records into a JSON-serializable list."""
     out = []
     for p in placements or []:
         inst = p["item"]
         out.append(
             {
-                "id": inst.id,  # original item id
-                "x": p["position"][0],  # lower-left corner within mailer (in)
+                "id": inst.id,
+                "x": p["position"][0],
                 "y": p["position"][1],
-                "w": p["width"],  # placed width (in)
-                "l": p["length"],  # placed length (in)
+                "z": float(p.get("z", 0.0)),          # <-- new
+                "w": p["width"],
+                "l": p["length"],
+                "h": float(p.get("height", inst.dims[0])),  # <-- new (thickness)
                 "orientation": "x-long" if p["orientation"] == 0 else "y-long",
             }
         )
