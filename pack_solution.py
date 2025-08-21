@@ -46,10 +46,6 @@ import os
 import sys
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Any
-from pprint import pprint
-import random
-import json
-from typing import Optional, List, Tuple, Dict, Any
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -58,7 +54,9 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 # Inject the cloned repository on to the Python search path so that
 # py3dbp can be imported.  When this module is used from a different
 # location you may need to adjust the relative path below.
-REPO_PATH = os.path.join(os.path.dirname(__file__), "3d_bin_pack_repo", "3D-bin-packing-master")
+REPO_PATH = os.path.join(
+    os.path.dirname(__file__), "3d_bin_pack_repo", "3D-bin-packing-master"
+)
 if os.path.isdir(REPO_PATH) and REPO_PATH not in sys.path:
     sys.path.insert(0, REPO_PATH)
 
@@ -68,10 +66,11 @@ try:
     # :class:`Item` objects, then adding them to a :class:`Packer` and
     # finally calling :meth:`Packer.pack`【170516555184532†L417-L472】.
     from py3dbp import Packer, Bin, Item, Painter  # type: ignore
-except ImportError as exc:  # pragma: no cover - runtime import error only
+except ImportError:  # pragma: no cover - runtime import error only
     raise ImportError(
         "Unable to import py3dbp.  Make sure the Git repository has been "
-        "downloaded and that REPO_PATH points to the root of the repo.")
+        "downloaded and that REPO_PATH points to the root of the repo."
+    )
 
 
 @dataclass
@@ -203,7 +202,9 @@ def generate_item_instances(items: List[Dict[str, Any]]) -> List[ItemInstance]:
     return instances
 
 
-def can_fit_in_mailer(items: List[ItemInstance], mailer_width: int, mailer_length: int) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
+def can_fit_in_mailer(
+    items: List[ItemInstance], mailer_width: int, mailer_length: int
+) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
     """Attempt to pack items into a single padded mailer.
 
     A padded mailer is treated as a 2D rectangle with fixed height
@@ -244,7 +245,9 @@ def can_fit_in_mailer(items: List[ItemInstance], mailer_width: int, mailer_lengt
     # Sort items by descending area (largest face) then by max side.
     # dims are sorted ascending, so dims[2]*dims[1] is the area of the
     # two largest sides.
-    items_sorted = sorted(items, key=lambda it: (it.dims[2] * it.dims[1], it.dims[2]), reverse=True)
+    items_sorted = sorted(
+        items, key=lambda it: (it.dims[2] * it.dims[1], it.dims[2]), reverse=True
+    )
     placements: List[Dict[str, Any]] = []
     y_offset = 0
     row_height = 0
@@ -258,14 +261,19 @@ def can_fit_in_mailer(items: List[ItemInstance], mailer_width: int, mailer_lengt
         ]
         for width_i, length_i, orientation_flag in orientations:
             # try to place in current row
-            if row_width + width_i <= mailer_width and length_i <= mailer_length - y_offset:
-                placements.append({
-                    "item": inst,
-                    "orientation": orientation_flag,
-                    "position": (row_width, y_offset),
-                    "width": width_i,
-                    "length": length_i,
-                })
+            if (
+                row_width + width_i <= mailer_width
+                and length_i <= mailer_length - y_offset
+            ):
+                placements.append(
+                    {
+                        "item": inst,
+                        "orientation": orientation_flag,
+                        "position": (row_width, y_offset),
+                        "width": width_i,
+                        "length": length_i,
+                    }
+                )
                 row_width += width_i
                 row_height = max(row_height, length_i)
                 placed = True
@@ -280,13 +288,15 @@ def can_fit_in_mailer(items: List[ItemInstance], mailer_width: int, mailer_lengt
             # Try orientations again.
             for width_i, length_i, orientation_flag in orientations:
                 if width_i <= mailer_width and length_i <= mailer_length - y_offset:
-                    placements.append({
-                        "item": inst,
-                        "orientation": orientation_flag,
-                        "position": (row_width, y_offset),
-                        "width": width_i,
-                        "length": length_i,
-                    })
+                    placements.append(
+                        {
+                            "item": inst,
+                            "orientation": orientation_flag,
+                            "position": (row_width, y_offset),
+                            "width": width_i,
+                            "length": length_i,
+                        }
+                    )
                     row_width += width_i
                     row_height = max(row_height, length_i)
                     placed = True
@@ -296,7 +306,9 @@ def can_fit_in_mailer(items: List[ItemInstance], mailer_width: int, mailer_lengt
     return True, placements
 
 
-def pack_in_box(items: List[ItemInstance], box_dims: Tuple[int, int, int]) -> Tuple[bool, Any]:
+def pack_in_box(
+    items: List[ItemInstance], box_dims: Tuple[int, int, int]
+) -> Tuple[bool, Any]:
     """Attempt to pack items into a single 3D box using py3dbp.
 
     The 3D bin packing library allows items to be rotated in all
@@ -346,13 +358,13 @@ def pack_in_box(items: List[ItemInstance], box_dims: Tuple[int, int, int]) -> Tu
         py_item = Item(
             partno=f"{inst.id}_{idx}",
             name=inst.id,
-            typeof='cube',
+            typeof="cube",
             WHD=dims_sorted_desc,
             weight=1,
             level=1,
             loadbear=100,
             updown=True,
-            color=color
+            color=color,
         )
         packer.addItem(py_item)
     # Perform the packing.  The README recommends using ``bigger_first``
@@ -404,7 +416,13 @@ def set_axes_equal(ax: plt.Axes) -> None:
     ax.set_zlim3d([z_middle - max_range / 2, z_middle + max_range / 2])
 
 
-def draw_cuboid(ax: plt.Axes, origin: Tuple[float, float, float], size: Tuple[float, float, float], color: Any, label: Optional[str] = None) -> None:
+def draw_cuboid(
+    ax: plt.Axes,
+    origin: Tuple[float, float, float],
+    size: Tuple[float, float, float],
+    color: Any,
+    label: Optional[str] = None,
+) -> None:
     """Draw a solid cuboid on a 3D axis.
 
     Parameters
@@ -436,7 +454,7 @@ def draw_cuboid(ax: plt.Axes, origin: Tuple[float, float, float], size: Tuple[fl
         (X, Y, Z + dz),
         (X + dx, Y, Z + dz),
         (X + dx, Y + dy, Z + dz),
-        (X, Y + dy, Z + dz)
+        (X, Y + dy, Z + dz),
     ]
     # Define the six faces by listing the vertices that make up each face.
     faces = [
@@ -445,12 +463,24 @@ def draw_cuboid(ax: plt.Axes, origin: Tuple[float, float, float], size: Tuple[fl
         [vertices[0], vertices[1], vertices[5], vertices[4]],
         [vertices[2], vertices[3], vertices[7], vertices[6]],
         [vertices[1], vertices[2], vertices[6], vertices[5]],
-        [vertices[4], vertices[7], vertices[3], vertices[0]]
+        [vertices[4], vertices[7], vertices[3], vertices[0]],
     ]
-    poly = Poly3DCollection(faces, facecolors=[color], edgecolors='black', linewidths=1, alpha=0.6)
+    poly = Poly3DCollection(
+        faces, facecolors=[color], edgecolors="black", linewidths=1, alpha=0.6
+    )
     ax.add_collection3d(poly)
     if label:
-        ax.text(X + dx / 2, Y + dy / 2, Z + dz / 2, label, ha='center', va='center', color='black', fontsize=8)
+        ax.text(
+            X + dx / 2,
+            Y + dy / 2,
+            Z + dz / 2,
+            label,
+            ha="center",
+            va="center",
+            color="black",
+            fontsize=8,
+        )
+
 
 def _to_offset2(mailer_offset):
     """Accept a scalar or (ox, oy); return 2 floats."""
@@ -460,11 +490,12 @@ def _to_offset2(mailer_offset):
         return float(mailer_offset[0]), float(mailer_offset[1])
     raise ValueError("mailer_offset must be a number or a 2-tuple/list")
 
+
 def visualise_mailer_solution(
     mailer_dims: Tuple[int, int],
     placements: List[Dict[str, Any]],
-    mailer_offset,                 # scalar or (ox, oy); height has NO offset
-    flat_height: int = 3
+    mailer_offset,  # scalar or (ox, oy); height has NO offset
+    flat_height: int = 3,
 ) -> None:
     """
     Visualise a padded mailer packing solution.
@@ -473,18 +504,21 @@ def visualise_mailer_solution(
     'mailer_offset' (no change to height).
     """
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     width, length = mailer_dims
 
     # Draw the base mailer (no offset in z).
     draw_cuboid(
-        ax, (0, 0, 0), (width, length, flat_height),
-        color=(0.95, 0.95, 0.95, 0.3), label=None
+        ax,
+        (0, 0, 0),
+        (width, length, flat_height),
+        color=(0.95, 0.95, 0.95, 0.3),
+        label=None,
     )
 
     # Place items
-    cmap = plt.cm.get_cmap('tab20')
+    cmap = plt.cm.get_cmap("tab20")
     for idx, placement in enumerate(placements):
         inst = placement["item"]
         if placement["orientation"] == 0:
@@ -500,9 +534,9 @@ def visualise_mailer_solution(
     ox, oy = _to_offset2(mailer_offset / 2)
     # Expand equally around all sides → shift origin negatively in x/y
     x0, y0, z0 = -ox, -oy, 0.0
-    dx = float(width)  + 2.0 * ox
+    dx = float(width) + 2.0 * ox
     dy = float(length) + 2.0 * oy
-    dz = float(flat_height)        # no z offset
+    dz = float(flat_height)  # no z offset
 
     _draw_wire_cube(ax, x0, y0, z0, dx, dy, dz, linewidth=2)  # add color='k' if desired
 
@@ -516,7 +550,8 @@ def visualise_mailer_solution(
         plt.show()
     except Exception:
         pass  # safe in headless environments
-    
+
+
 def _to_offset3(box_offset):
     """Accept a scalar or (ox, oy, oz); return 3 floats."""
     if isinstance(box_offset, (int, float)):
@@ -525,16 +560,18 @@ def _to_offset3(box_offset):
         return float(box_offset[0]), float(box_offset[1]), float(box_offset[2])
     raise ValueError("box_offset must be a number or a 3-tuple/list")
 
+
 def _draw_wire_cube(ax, x, y, z, dx, dy, dz, **kwargs):
     """Draw a rectangular wireframe parallelepiped like Painter's mode=1."""
-    xx = [x, x, x+dx, x+dx, x]
-    yy = [y, y+dy, y+dy, y, y]
-    ax.plot3D(xx, yy, [z]*5, **kwargs)
-    ax.plot3D(xx, yy, [z+dz]*5, **kwargs)
-    ax.plot3D([x, x], [y, y], [z, z+dz], **kwargs)
-    ax.plot3D([x, x], [y+dy, y+dy], [z, z+dz], **kwargs)
-    ax.plot3D([x+dx, x+dx], [y+dy, y+dy], [z, z+dz], **kwargs)
-    ax.plot3D([x+dx, x+dx], [y, y], [z, z+dz], **kwargs)
+    xx = [x, x, x + dx, x + dx, x]
+    yy = [y, y + dy, y + dy, y, y]
+    ax.plot3D(xx, yy, [z] * 5, **kwargs)
+    ax.plot3D(xx, yy, [z + dz] * 5, **kwargs)
+    ax.plot3D([x, x], [y, y], [z, z + dz], **kwargs)
+    ax.plot3D([x, x], [y + dy, y + dy], [z, z + dz], **kwargs)
+    ax.plot3D([x + dx, x + dx], [y + dy, y + dy], [z, z + dz], **kwargs)
+    ax.plot3D([x + dx, x + dx], [y, y], [z, z + dz], **kwargs)
+
 
 def visualise_box_solution(packer, box_dims, box_offset):
     """
@@ -549,21 +586,18 @@ def visualise_box_solution(packer, box_dims, box_offset):
     for b in bins:
         painter = Painter(b)
         plt_obj = painter.plotBoxAndItems(
-            title=b.partno,
-            alpha=0.3,
-            write_num=True,
-            fontsize=8
+            title=b.partno, alpha=0.3, write_num=True, fontsize=8
         )
 
         # Get current 3D axes created by Painter
         ax = plt.gca()
 
         # Compute enlarged outer box
-        ox, oy, oz = _to_offset3(box_offset/2)
+        ox, oy, oz = _to_offset3(box_offset / 2)
         x0, y0, z0 = -ox, -oy, -oz
-        dx = float(b.width)  + 2.0 * ox
+        dx = float(b.width) + 2.0 * ox
         dy = float(b.height) + 2.0 * oy
-        dz = float(b.depth)  + 2.0 * oz
+        dz = float(b.depth) + 2.0 * oz
 
         # Draw outer wireframe
         _draw_wire_cube(ax, x0, y0, z0, dx, dy, dz, linewidth=2)
@@ -575,6 +609,7 @@ def visualise_box_solution(packer, box_dims, box_offset):
             last_fig.show()
         except Exception:
             pass  # headless environments
+
 
 def visualise_individual_items(items: List[ItemInstance]) -> None:
     """Visualise each unique item individually in 3D.
@@ -590,12 +625,16 @@ def visualise_individual_items(items: List[ItemInstance]) -> None:
         List of item instances to visualise.
     """
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
     offset = 0.0
     gap = 1.0  # extra space between items
-    cmap = plt.cm.get_cmap('tab20')
+    cmap = plt.cm.get_cmap("tab20")
     for idx, inst in enumerate(items):
-        dx, dy, dz = inst.dims[2], inst.dims[1], inst.dims[0]  # largest to smallest along x,y,z
+        dx, dy, dz = (
+            inst.dims[2],
+            inst.dims[1],
+            inst.dims[0],
+        )  # largest to smallest along x,y,z
         color = cmap(idx % 20)
         draw_cuboid(ax, (offset, 0, 0), (dx, dy, dz), color=color, label=inst.id)
         offset += dx + gap
@@ -606,19 +645,22 @@ def visualise_individual_items(items: List[ItemInstance]) -> None:
     set_axes_equal(ax)
     plt.show()
 
+
 def mailer_arrangement_json(placements):
     """Convert internal placement records into a JSON-serializable list."""
     out = []
     for p in placements or []:
         inst = p["item"]
-        out.append({
-            "id": inst.id,                 # original item id
-            "x": p["position"][0],         # lower-left corner within mailer (in)
-            "y": p["position"][1],
-            "w": p["width"],               # placed width (in)
-            "l": p["length"],              # placed length (in)
-            "orientation": "x-long" if p["orientation"] == 0 else "y-long"
-        })
+        out.append(
+            {
+                "id": inst.id,  # original item id
+                "x": p["position"][0],  # lower-left corner within mailer (in)
+                "y": p["position"][1],
+                "w": p["width"],  # placed width (in)
+                "l": p["length"],  # placed length (in)
+                "orientation": "x-long" if p["orientation"] == 0 else "y-long",
+            }
+        )
     return out
 
 
@@ -628,8 +670,8 @@ def choose_container(
     items: List[Dict[str, Any]],
     debug: bool = False,
     flat_height: float = 3,
-    box_offset: int=2,
-    mailer_offset: int=2,
+    box_offset: int = 2,
+    mailer_offset: int = 2,
 ) -> Tuple[str, Optional[Any]]:
     """Select the smallest container that can hold all items.
 
@@ -679,13 +721,17 @@ def choose_container(
     item_instances = generate_item_instances(items)
     # Try padded mailers first.
     for width, length, m_string in sort_mailers(padded_mailers):
-        fits, placement = can_fit_in_mailer(item_instances, width - mailer_offset, length - mailer_offset)
+        fits, placement = can_fit_in_mailer(
+            item_instances, width - mailer_offset, length - mailer_offset
+        )
         if fits:
             if debug:
                 # Visualise each item and the solution.
                 # visualise_individual_items(item_instances)
                 if placement is not None:
-                    visualise_mailer_solution((width, length), placement, mailer_offset, flat_height)
+                    visualise_mailer_solution(
+                        (width, length), placement, mailer_offset, flat_height
+                    )
             return f"{width}x{length}", mailer_arrangement_json(placement)
     # Fallback to boxes.
     for w, h, d, b_string in sort_boxes(boxes):
@@ -695,7 +741,9 @@ def choose_container(
         # matters when the list of item orientations is such that
         # different container orientations yield different packing
         # success.
-        for perm in set(itertools.permutations((w - box_offset, h - box_offset, d - box_offset))):
+        for perm in set(
+            itertools.permutations((w - box_offset, h - box_offset, d - box_offset))
+        ):
             success, packer = pack_in_box(item_instances, perm)
             if success:
                 if debug and packer is not None:
@@ -703,78 +751,13 @@ def choose_container(
                     visualise_box_solution(packer, perm, box_offset)
                 # Return the canonical dimension string in sorted order
                 sorted_dims = sorted(perm)
-                return f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}", packer if debug else None
+                return (
+                    f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}",
+                    packer if debug else None,
+                )
     raise RuntimeError("No suitable mailer or box could be found to fit all items")
+
 
 def iter_bins(packer):
     """Return a list of bins from a py3dbp Packer across versions."""
     return list(packer) if hasattr(packer, "__iter__") else getattr(packer, "bins", [])
-
-def gen_random_items(
-    n_skus: int = 5,
-    qty_range: Tuple[int, int] = (1, 3),
-    min_dim: int = 1,
-    max_dim: int = 8,
-    mailer_bias: float = 0.65,
-    tall_prob: float = 0.25,
-    seed: Optional[int] = None,
-) -> List[Dict[str, Any]]:
-    """
-    Returns a list[ {id, dimension, quantity}, ... ] in the required format.
-    - mailer_bias pushes two longest edges toward moderate sizes.
-    - tall_prob injects thickness > 4 to force 3D box cases sometimes.
-    """
-    # Determine and apply the seed
-    if seed is None:
-        # Use a strong, non-deterministic source to pick a seed,
-        # then report it so the run can be reproduced.
-        seed_used = random.SystemRandom().randrange(0, 2**32 - 1)
-    else:
-        seed_used = seed
-    random.seed(seed_used)
-    print(f"Seed: {seed_used}")
-
-    items: List[Dict[str, Any]] = []
-    for i in range(n_skus):
-        q = random.randint(qty_range[0], qty_range[1])
-
-        # favor rectangular footprints for mailers
-        if random.random() < mailer_bias:
-            a = random.randint(max(2, min_dim), min(max_dim, 12))
-            b = random.randint(max(2, min_dim), min(max_dim, 13))
-        else:
-            a = random.randint(min_dim, max_dim)
-            b = random.randint(min_dim, max_dim)
-
-        # thickness
-        if random.random() < tall_prob:
-            c = random.randint(5, max(6, min(max_dim, 10)))  # likely too thick for mailers
-        else:
-            c = random.randint(1, 4)  # mailer-friendly
-
-        dims = [a, b, c]
-        random.shuffle(dims)
-
-        items.append({
-            "id": "SKU{:03d}".format(i + 1),
-            "dimension": "{}x{}x{}".format(dims[0], dims[1], dims[2]),
-            "quantity": q,
-        })
-
-    return items
-
-def main():
-      # pragma: no cover
-    # Example usage of the choose_container function.  This block is
-    # executed only when the module is run directly.  It is not
-    # executed when the module is imported, which allows users to
-    # import choose_container without side effects.
-    sample_mailers = ["12x6", "12x7", "12x8", "12x9", "12x10", "12x11", "12x12", "12x14", "12x15", "12x16"]
-    sample_boxes = ["8x8x8", "12x12x8", "12x12x12", "18x12x12", "18x18x12"]
-    sample_items = gen_random_items(n_skus=3)
-    container, info = choose_container(sample_mailers, sample_boxes, sample_items, debug=True, flat_height=3, box_offset=3, mailer_offset=3)
-    print(f"Selected container: {container}")
-    pprint(info)
-
-if __name__ == "__main__":
-    main()

@@ -1,5 +1,5 @@
 # main.py
-from __future__ import annotations
+# from __future__ import annotations
 
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify
@@ -97,11 +97,18 @@ def solve():
     """
     try:
         data = request.get_json(force=True, silent=False)
+    except BadRequest:
+        # Malformed JSON only → standardize this message
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    try:
         payload = _validate_payload(data)
     except BadRequest as e:
+        # Validation issues keep their detailed messages
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        return jsonify({"error": "Invalid JSON payload: %s" % e}), 400
+        # Any other unexpected parsing/validation error
+        return jsonify({"error": f"Invalid JSON payload: {e}"}), 400
 
     try:
         container, info = choose_container(
