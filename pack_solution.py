@@ -44,12 +44,16 @@ the repository for version information【170516555184532†L417-L472】.  The
 import itertools
 import os
 import sys
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Optional, Any
+from pprint import pprint
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+layer_tol = 0.02
 
 # Inject the cloned repository on to the Python search path so that
 # py3dbp can be imported.  When this module is used from a different
@@ -65,7 +69,7 @@ try:
     # upstream README, packing requires creating a :class:`Bin` and
     # :class:`Item` objects, then adding them to a :class:`Packer` and
     # finally calling :meth:`Packer.pack`【170516555184532†L417-L472】.
-    from py3dbp import Packer, Bin, Item, Painter  # type: ignore
+    from py3dbp import Bin, Item, Packer, Painter  # type: ignore
 except ImportError:  # pragma: no cover - runtime import error only
     raise ImportError(
         "Unable to import py3dbp.  Make sure the Git repository has been "
@@ -428,7 +432,7 @@ def pack_in_box(
             # are taken from the example code.
             check_stable=True,
             support_surface_ratio=0.75,
-            number_of_decimals=0,
+            number_of_decimals=1,
         )
         success = len(packer.unfit_items) == 0
     except Exception:
@@ -436,6 +440,153 @@ def pack_in_box(
         packer = None
     return success, packer if success else None
 
+
+
+def pack_as_many_in_box(
+    items: List[ItemInstance], box_dims: Tuple[int, int, int]
+) -> Tuple[Any, List[ItemInstance]]:
+    """
+    Pack as many of 'items' as possible in a single box of 'box_dims'.
+    Returns (packer, remaining_items). If packing throws an exception,
+    returns (None, items) meaning nothing got packed.
+    """
+    width, height, depth = box_dims
+    bin_obj = Bin(partno="candidate_box", WHD=(width, height, depth), max_weight=10**9)
+    packer = Packer()
+    packer.addBin(bin_obj)
+
+    # Track back-references to ItemInstance objects
+    py_items: List[Tuple[Any, ItemInstance]] = []
+    for idx, inst in enumerate(items):
+        dims = inst.dims
+        dims_sorted_desc = tuple(sorted(dims, reverse=True))
+        color = plt.cm.tab20(idx % 20)
+        py_item = Item(
+            partno=f"{inst.id}_{idx}",
+            name=inst.id,
+            typeof="cube",
+            WHD=dims_sorted_desc,
+            weight=1,
+            level=1,
+            loadbear=100,
+            updown=True,
+            color=color,
+        )
+        packer.addItem(py_item)
+        py_items.append((py_item, inst))
+
+    try:
+        packer.pack(
+            bigger_first=True,
+            fix_point=True,
+            distribute_items=True,
+            check_stable=True,
+            support_surface_ratio=0.75,
+            number_of_decimals=1,
+        )
+    except Exception:
+        return None, list(items)  # nothing packed
+
+    # Determine which items didn't fit — compare by 'partno' instead of object identity
+    unfit_partnos = {getattr(i, "partno", None) for i in getattr(packer, "unfit_items", [])}
+    unfit_partnos.discard(None)
+
+    # Fallback: if the library didn't populate unfit_items, infer unfit by subtracting placed from all
+    if not unfit_partnos:
+        placed_partnos = {
+            getattr(it, "partno", None)
+            for b in getattr(packer, "bins", [])
+            for it in getattr(b, "items", [])
+        }
+        all_partnos = {py_item.partno for (py_item, _inst) in py_items}
+        unfit_partnos = all_partnos - placed_partnos
+
+    remaining: List[ItemInstance] = [
+        inst for (py_item, inst) in py_items if py_item.partno in unfit_partnos
+    ]
+    return packer, remaining
+
+def greedy_pack_into_biggest_box(
+    items: List[ItemInstance],
+    boxes: List[str],
+    debug: bool = False,
+    box_offset: int = 2,
+) -> Tuple[str, Optional[List[Any]], List[ItemInstance], List[ItemInstance]]:
+    """
+    Use the largest box size available. Pack as many items as possible into
+    that box; then recursively pack the remaining items into more copies of
+    the same largest box until no items remain or we can't place anything.
+
+    Returns:
+        (box_dim_string_with_count,
+         [list_of_packers] or None,
+         leftover_items,
+         last_box_items)   # <— NEW: the ItemInstance objects placed in the final box
+    """
+    sb = sort_boxes(boxes)
+    if not sb:
+        return "", None, list(items), []
+
+    w, h, d, _bstr = sb[-1]
+    base_perms = list(set(itertools.permutations(
+        (w - box_offset, h - box_offset, d - box_offset)
+    )))
+
+    remaining = list(items)
+    packers: List[Any] = []
+    box_count = 0
+    last_box_items: List[ItemInstance] = []  # track items packed in the most recent box
+
+    while remaining:
+        best_packer = None
+        best_remaining = None
+        best_unfit = len(remaining) + 1
+
+        for perm in base_perms:
+            packer, rem = pack_as_many_in_box(remaining, perm)
+            if packer is None:
+                continue
+            if len(rem) < best_unfit:
+                best_unfit = len(rem)
+                best_packer = packer
+                best_remaining = rem
+
+        # No orientation could place anything → stop
+        if best_packer is None or best_remaining is None:
+            break
+
+        # If no progress, stop to avoid infinite loop
+        if len(best_remaining) == len(remaining):
+            break
+
+        # ---- Items that were actually placed in THIS box ----
+        # Both 'remaining' and 'best_remaining' are lists of *your* ItemInstance objects,
+        # so identity/equality is stable. Items that disappeared from 'remaining'
+        # are exactly the ones packed this iteration.
+        this_box_items = [inst for inst in remaining if inst not in best_remaining]
+        last_box_items = this_box_items  # overwrite so we keep only the final box's contents
+
+        if debug and best_packer is not None:
+            visualise_box_solution(best_packer, (w, h, d), box_offset)
+
+        packers.append(best_packer)
+        box_count += 1
+        remaining = best_remaining  # continue with leftovers
+
+    # Canonical dimension string (sorted asc + add back offset)
+    sorted_dims = sorted((w - box_offset, h - box_offset, d - box_offset))
+    box_str = f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}"
+    if box_count == 0:
+        return box_str + "*0", packers if debug else None, remaining, []
+    if box_count > 1:
+        box_count = box_count - 1
+        packers = packers[:-1]
+    else:
+        last_box_items = []
+
+    last_box_items = summarize_item_instances(last_box_items)
+
+    return f"{box_str}*{box_count}", packers, remaining, last_box_items
 
 def set_axes_equal(ax: plt.Axes) -> None:
     """Adjust a 3D axis so that all axes are scaled equally.
@@ -698,6 +849,7 @@ def mailer_arrangement_json(placements):
         inst = p["item"]
         out.append(
             {
+                "step": 1,
                 "id": inst.id,
                 "x": p["position"][0],
                 "y": p["position"][1],
@@ -710,6 +862,143 @@ def mailer_arrangement_json(placements):
         )
     return out
 
+def _item_pos(item) -> Tuple[float, float, float]:
+    pos = getattr(item, "position", (0, 0, 0))
+    # Robust to tuple/list or shorter sequences
+    x = float(pos[0]) if len(pos) > 0 else 0.0
+    y = float(pos[1]) if len(pos) > 1 else 0.0
+    z = float(pos[2]) if len(pos) > 2 else 0.0
+    return x, y, z
+
+def _item_dims_xyz(item) -> Tuple[float, float, float]:
+    """
+    Try to read oriented dimensions along the world axes (x,y,z) after packing.
+    py3dbp typically exposes width/height/depth on placed items. If not, we
+    fall back to getDimension() or WHD.
+    We map:
+        x-axis width  -> w
+        y-axis depth  -> l
+        z-axis height -> h
+    """
+    # Preferred: explicit oriented attributes
+    w = getattr(item, "width", None)
+    h = getattr(item, "height", None)
+    d = getattr(item, "depth", None)
+    if w is not None and h is not None and d is not None:
+        return float(w), float(d), float(h)
+
+    # Fallback: getDimension() (commonly returns (W, H, D))
+    getdim = getattr(item, "getDimension", None)
+    if callable(getdim):
+        W, H, D = getdim()
+        return float(W), float(D), float(H)
+
+    # Fallback: original WHD (pre-rotation)
+    WHD = getattr(item, "WHD", None)
+    if WHD:
+        W, H, D = WHD
+        return float(W), float(D), float(H)
+
+    # Last resort
+    dims = getattr(item, "dims", (0, 0, 0))
+    return float(dims[0]), float(dims[1]), float(dims[2])
+
+def _cluster_layers_by_z(items: List[Any], tol: float) -> List[List[Any]]:
+    """
+    Group items into layers by their base Z (position.z), using a tolerance.
+    Items whose z differ by <= tol belong to the same layer.
+    """
+    # Sort by base z ascending first
+    items_sorted = sorted(items, key=lambda it: _item_pos(it)[2])
+    layers: List[List[Any]] = []
+    current: List[Any] = []
+    last_z: float = None  # type: ignore
+
+    for it in items_sorted:
+        z = _item_pos(it)[2]
+        if last_z is None or abs(z - last_z) <= tol:
+            current.append(it)
+        else:
+            layers.append(current)
+            current = [it]
+        last_z = z
+
+    if current:
+        layers.append(current)
+    return layers
+
+def boxes_arrangement_json(
+    packers: Union[Any, Iterable[Any]],
+    layer_tol: float = 1e-3,
+    within_layer_sort: str = "yx",  # "xy" or "yx": order items left-to-right & front-to-back
+) -> List[Dict[str, Any]]:
+    """
+    Produce step-by-step placement instructions for boxes (bins) from py3dbp packers.
+    - Steps are bottom-up Z layers.
+    - All items in the same layer share the same 'step'.
+    - Returns a flat list of dicts:
+        {
+          "box": <1-based index of the box across all packers>,
+          "step": <1..N within that box>,
+          "id": "<your id>",
+          "x": <float>, "y": <float>, "z": <float>,
+          "w": <float>, "l": <float>, "h": <float>,
+          "orientation": "x-long" | "y-long",
+        }
+    Notes:
+      * 'id' comes from item.name or item.partno (we set those when creating Items).
+      * Orientation is derived by comparing the in-box X and Y extents.
+    """
+    # Normalize to an iterable of packers
+    if not isinstance(packers, (list, tuple)):
+        packers = [packers]
+
+    out: List[Dict[str, Any]] = []
+    box_counter = 0
+
+    for packer in packers:
+        for bin_obj in getattr(packer, "bins", []):
+            items = list(getattr(bin_obj, "items", []))
+            if not items:
+                continue
+
+            box_counter += 1
+            # Group by Z layers
+            layers = _cluster_layers_by_z(items, tol=layer_tol)
+
+            # Steps start at 1 for each box
+            step_num = 1
+            for layer_items in layers:
+                # Sort within layer for a consistent placement workflow:
+                # front-to-back (y ascending), then left-to-right (x ascending) by default.
+                if within_layer_sort == "xy":
+                    layer_items.sort(key=lambda it: (_item_pos(it)[0], _item_pos(it)[1]))
+                else:  # "yx"
+                    layer_items.sort(key=lambda it: (_item_pos(it)[1], _item_pos(it)[0]))
+
+                for it in layer_items:
+                    x, y, z = _item_pos(it)
+                    w, l, h = _item_dims_xyz(it)  # x→w, y→l, z→h
+                    orient = "x-long" if w >= l else "y-long"
+                    ident = getattr(it, "name", None) or getattr(it, "partno", "")
+
+                    out.append(
+                        {
+                            "box": box_counter,
+                            "step": step_num,
+                            "id": ident,
+                            "x": float(x),
+                            "y": float(y),
+                            "z": float(z),
+                            "w": float(w),
+                            "l": float(l),
+                            "h": float(h),
+                            "orientation": orient,
+                        }
+                    )
+                step_num += 1
+
+    return out
 
 def choose_container(
     padded_mailers: List[str],
@@ -719,6 +1008,7 @@ def choose_container(
     flat_height: float = 3,
     box_offset: int = 2,
     mailer_offset: int = 2,
+    results: List[Dict[str, Any]] = [],
 ) -> Tuple[str, Optional[Any]]:
     """Select the smallest container that can hold all items.
 
@@ -779,7 +1069,14 @@ def choose_container(
                     visualise_mailer_solution(
                         (width, length), placement, mailer_offset, flat_height
                     )
-            return f"{width}x{length}", mailer_arrangement_json(placement)
+                    
+            results.append({
+                "box_dimension": f"{width}x{length}",
+                "packers": mailer_arrangement_json(placement),
+                "unfit_items": []
+            })
+            return results
+        
     # Fallback to boxes.
     for w, h, d, b_string in sort_boxes(boxes):
         # Try all permutations of the box dimensions.  The 3D bin
@@ -798,13 +1095,87 @@ def choose_container(
                     visualise_box_solution(packer, perm, box_offset)
                 # Return the canonical dimension string in sorted order
                 sorted_dims = sorted(perm)
-                return (
-                    f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}",
-                    packer if debug else None,
-                )
-    raise RuntimeError("No suitable mailer or box could be found to fit all items")
+                results.append({
+                    "box_dimension": f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}",
+                    "packers": boxes_arrangement_json([packer], layer_tol) if debug else None,
+                    "unfit_items": []
+                })
+                return results
+            
+    # ---- Greedy multi-box fallback with the largest box ----
+    multi_str, multi_packers, unfitItems, last_box_items = greedy_pack_into_biggest_box(
+        item_instances, boxes, debug=debug, box_offset=box_offset
+    )
+    if last_box_items:
+        choose_container(
+            padded_mailers=padded_mailers,
+            boxes=boxes,
+            items=last_box_items,
+            debug=debug,
+            flat_height=flat_height,
+            box_offset=box_offset,
+            mailer_offset=mailer_offset,
+            results=results
+        )
 
+    results.append({
+        "box_dimension": multi_str,
+        "packers": boxes_arrangement_json(multi_packers, layer_tol),
+        "unfit_items": unfitItems
+    })
+
+    # return multi_str, multi_packers, unfitItems
+    return results
+
+
+def _dim_to_str(dims: Tuple[float, float, float]) -> str:
+    """Format dims back to 'WxHxD' with ints when values are integral."""
+    def fmt(x: float) -> str:
+        xi = int(round(x))
+        return str(xi) if abs(x - xi) < 1e-6 else f"{x:g}"
+    return "x".join(fmt(v) for v in dims)
+
+def summarize_item_instances(instances: List["ItemInstance"]) -> List[Dict[str, Any]]:
+    """
+    Aggregate ItemInstance objects into [{'id','dimension','quantity'}, ...].
+    Groups by (id, dimension).
+    """
+    counts: defaultdict[Tuple[str, str], int] = defaultdict(int)
+    for inst in instances:
+        item_id = getattr(inst, "id", None) or getattr(inst, "name", "UNKNOWN")
+        # Prefer any stored string dimension if you have one; else build from dims tuple
+        dim_str = (
+            getattr(inst, "dimension", None)
+            or getattr(inst, "dim_str", None)
+            or _dim_to_str(tuple(getattr(inst, "dims")))  # expects inst.dims = (W,H,D)
+        )
+        counts[(item_id, dim_str)] += 1
+
+    # Build the desired list of dicts
+    out: List[Dict[str, Any]] = [
+        {"id": item_id, "dimension": dim_str, "quantity": qty}
+        for (item_id, dim_str), qty in counts.items()
+    ]
+    # Optional: stable ordering
+    out.sort(key=lambda d: (d["id"], d["dimension"]))
+    return out
 
 def iter_bins(packer):
     """Return a list of bins from a py3dbp Packer across versions."""
     return list(packer) if hasattr(packer, "__iter__") else getattr(packer, "bins", [])
+
+
+if __name__ == "__main__":
+    # Entry point for the script
+    results = choose_container(
+        padded_mailers=["6x9", "10x13"],
+        boxes=["8x8x8", "12x10x6", "14x12x10"],
+        items=[
+            {"id": "A", "dimension": "6x4x2", "quantity": 8},
+            {"id": "B", "dimension": "10x3x2", "quantity": 10},
+            {"id": "C", "dimension": "15x15x12", "quantity": 3},
+        ],
+        debug=False,
+        box_offset=2,
+    )
+    pprint(results)

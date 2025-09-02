@@ -114,7 +114,7 @@ def solve():
         return jsonify({"error": f"Invalid JSON payload: {e}"}), 400
 
     try:
-        container, info = choose_container(
+        results = choose_container(
             padded_mailers=payload["sample_mailers"],
             boxes=payload["sample_boxes"],
             items=payload["sample_items"],
@@ -123,7 +123,7 @@ def solve():
             box_offset=payload["box_offset"],
             mailer_offset=payload["mailer_offset"],
         )
-        return jsonify({"container": container, "info": info})
+        return results
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
