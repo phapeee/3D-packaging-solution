@@ -39,7 +39,7 @@ the repository for version information【170516555184532†L417-L472】.  The
 
 """
 
-# from __future__ import annotations
+# 
 
 import itertools
 import os
@@ -109,6 +109,7 @@ def parse_dims(dim_str: str) -> Tuple[int, ...]:
     if not parts or any(not p.isdigit() for p in parts):
         raise ValueError(f"Invalid dimension string: {dim_str}")
     return tuple(int(p) for p in parts)
+
 
 def parse_dims_float(dim_str: str) -> Tuple[float, ...]:
     """Parse a dimension string of the form ``"a x b x c"`` into a tuple of floats.
@@ -225,11 +226,12 @@ def generate_item_instances(items: List[Dict[str, Any]]) -> List[ItemInstance]:
             instances.append(ItemInstance(id=itm["id"], dims=dims_sorted))
     return instances
 
+
 def can_fit_in_mailer(
     items: List[ItemInstance],
     mailer_width: float,
     mailer_length: float,
-    flat_height: float
+    flat_height: float,
 ) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
     """
     Attempt to pack items into a padded mailer allowing stacking (layering in z).
@@ -253,13 +255,13 @@ def can_fit_in_mailer(
     placements: List[Dict[str, Any]] = []
 
     # Current layer bookkeeping
-    z_offset: float = 0.0          # where this layer starts
-    layer_height: float = 0.0      # max thickness in this layer
+    z_offset: float = 0.0  # where this layer starts
+    layer_height: float = 0.0  # max thickness in this layer
 
     # Within-layer shelf packing
-    y_offset: float = 0.0          # start of current row within the layer
-    row_height: float = 0.0        # max Y of the current row
-    row_width: float = 0.0         # used X within the current row
+    y_offset: float = 0.0  # start of current row within the layer
+    row_height: float = 0.0  # max Y of the current row
+    row_width: float = 0.0  # used X within the current row
 
     def try_place_in_current_layer(inst: ItemInstance) -> Optional[Dict[str, Any]]:
         """Try place 'inst' in current row, else new row, within this layer."""
@@ -274,10 +276,7 @@ def can_fit_in_mailer(
 
         # Try current row
         for w_i, l_i, ori in orientations:
-            if (
-                row_width + w_i <= mailer_width
-                and l_i <= (mailer_length - y_offset)
-            ):
+            if row_width + w_i <= mailer_width and l_i <= (mailer_length - y_offset):
                 pos = (row_width, y_offset)
                 row_width += w_i
                 row_height = max(row_height, l_i)
@@ -441,7 +440,6 @@ def pack_in_box(
     return success, packer if success else None
 
 
-
 def pack_as_many_in_box(
     items: List[ItemInstance], box_dims: Tuple[int, int, int]
 ) -> Tuple[Any, List[ItemInstance]]:
@@ -488,7 +486,9 @@ def pack_as_many_in_box(
         return None, list(items)  # nothing packed
 
     # Determine which items didn't fit — compare by 'partno' instead of object identity
-    unfit_partnos = {getattr(i, "partno", None) for i in getattr(packer, "unfit_items", [])}
+    unfit_partnos = {
+        getattr(i, "partno", None) for i in getattr(packer, "unfit_items", [])
+    }
     unfit_partnos.discard(None)
 
     # Fallback: if the library didn't populate unfit_items, infer unfit by subtracting placed from all
@@ -505,6 +505,7 @@ def pack_as_many_in_box(
         inst for (py_item, inst) in py_items if py_item.partno in unfit_partnos
     ]
     return packer, remaining
+
 
 def greedy_pack_into_biggest_box(
     items: List[ItemInstance],
@@ -528,9 +529,9 @@ def greedy_pack_into_biggest_box(
         return "", None, list(items), []
 
     w, h, d, _bstr = sb[-1]
-    base_perms = list(set(itertools.permutations(
-        (w - box_offset, h - box_offset, d - box_offset)
-    )))
+    base_perms = list(
+        set(itertools.permutations((w - box_offset, h - box_offset, d - box_offset)))
+    )
 
     remaining = list(items)
     packers: List[Any] = []
@@ -564,7 +565,9 @@ def greedy_pack_into_biggest_box(
         # so identity/equality is stable. Items that disappeared from 'remaining'
         # are exactly the ones packed this iteration.
         this_box_items = [inst for inst in remaining if inst not in best_remaining]
-        last_box_items = this_box_items  # overwrite so we keep only the final box's contents
+        last_box_items = (
+            this_box_items  # overwrite so we keep only the final box's contents
+        )
 
         if debug and best_packer is not None:
             visualise_box_solution(best_packer, (w, h, d), box_offset)
@@ -587,6 +590,7 @@ def greedy_pack_into_biggest_box(
     last_box_items = summarize_item_instances(last_box_items)
 
     return f"{box_str}*{box_count}", packers, remaining, last_box_items
+
 
 def set_axes_equal(ax: plt.Axes) -> None:
     """Adjust a 3D axis so that all axes are scaled equally.
@@ -853,7 +857,7 @@ def mailer_arrangement_json(placements):
                 "id": inst.id,
                 "x": p["position"][0],
                 "y": p["position"][1],
-                "z": float(p.get("z", 0.0)),          # <-- new
+                "z": float(p.get("z", 0.0)),  # <-- new
                 "w": p["width"],
                 "l": p["length"],
                 "h": float(p.get("height", inst.dims[0])),  # <-- new (thickness)
@@ -862,6 +866,7 @@ def mailer_arrangement_json(placements):
         )
     return out
 
+
 def _item_pos(item) -> Tuple[float, float, float]:
     pos = getattr(item, "position", (0, 0, 0))
     # Robust to tuple/list or shorter sequences
@@ -869,6 +874,7 @@ def _item_pos(item) -> Tuple[float, float, float]:
     y = float(pos[1]) if len(pos) > 1 else 0.0
     z = float(pos[2]) if len(pos) > 2 else 0.0
     return x, y, z
+
 
 def _item_dims_xyz(item) -> Tuple[float, float, float]:
     """
@@ -903,6 +909,7 @@ def _item_dims_xyz(item) -> Tuple[float, float, float]:
     dims = getattr(item, "dims", (0, 0, 0))
     return float(dims[0]), float(dims[1]), float(dims[2])
 
+
 def _cluster_layers_by_z(items: List[Any], tol: float) -> List[List[Any]]:
     """
     Group items into layers by their base Z (position.z), using a tolerance.
@@ -926,6 +933,7 @@ def _cluster_layers_by_z(items: List[Any], tol: float) -> List[List[Any]]:
     if current:
         layers.append(current)
     return layers
+
 
 def boxes_arrangement_json(
     packers: Union[Any, Iterable[Any]],
@@ -953,10 +961,11 @@ def boxes_arrangement_json(
     if not isinstance(packers, (list, tuple)):
         packers = [packers]
 
-    out: List[Dict[str, Any]] = []
+    out_list: List[List[Dict[str, Any]]] = []
     box_counter = 0
 
     for packer in packers:
+        out: List[Dict[str, Any]] = []
         for bin_obj in getattr(packer, "bins", []):
             items = list(getattr(bin_obj, "items", []))
             if not items:
@@ -972,9 +981,13 @@ def boxes_arrangement_json(
                 # Sort within layer for a consistent placement workflow:
                 # front-to-back (y ascending), then left-to-right (x ascending) by default.
                 if within_layer_sort == "xy":
-                    layer_items.sort(key=lambda it: (_item_pos(it)[0], _item_pos(it)[1]))
+                    layer_items.sort(
+                        key=lambda it: (_item_pos(it)[0], _item_pos(it)[1])
+                    )
                 else:  # "yx"
-                    layer_items.sort(key=lambda it: (_item_pos(it)[1], _item_pos(it)[0]))
+                    layer_items.sort(
+                        key=lambda it: (_item_pos(it)[1], _item_pos(it)[0])
+                    )
 
                 for it in layer_items:
                     x, y, z = _item_pos(it)
@@ -997,8 +1010,10 @@ def boxes_arrangement_json(
                         }
                     )
                 step_num += 1
+        out_list.append(out)
 
-    return out
+    return out_list
+
 
 def choose_container(
     padded_mailers: List[str],
@@ -1009,6 +1024,7 @@ def choose_container(
     box_offset: int = 2,
     mailer_offset: int = 2,
     results: List[Dict[str, Any]] = [],
+    first: bool = True,
 ) -> Tuple[str, Optional[Any]]:
     """Select the smallest container that can hold all items.
 
@@ -1054,12 +1070,18 @@ def choose_container(
     RuntimeError
         If no suitable container can be found.
     """
+    if first:
+        results.clear()
+
     # Expand the item list into individual instances.
     item_instances = generate_item_instances(items)
     # Try padded mailers first.
     for width, length, m_string in sort_mailers(padded_mailers):
         fits, placement = can_fit_in_mailer(
-            item_instances, width - mailer_offset, length - mailer_offset, flat_height=flat_height,
+            item_instances,
+            width - mailer_offset,
+            length - mailer_offset,
+            flat_height=flat_height,
         )
         if fits:
             if debug:
@@ -1069,14 +1091,15 @@ def choose_container(
                     visualise_mailer_solution(
                         (width, length), placement, mailer_offset, flat_height
                     )
-                    
-            results.append({
-                "box_dimension": f"{width}x{length}",
-                "packers": mailer_arrangement_json(placement),
-                "unfit_items": []
-            })
+
+            results.append(
+                {
+                    "box_dimension": f"{width}x{length}*1",
+                    "packers": [mailer_arrangement_json(placement)],
+                }
+            )
             return results
-        
+
     # Fallback to boxes.
     for w, h, d, b_string in sort_boxes(boxes):
         # Try all permutations of the box dimensions.  The 3D bin
@@ -1095,13 +1118,14 @@ def choose_container(
                     visualise_box_solution(packer, perm, box_offset)
                 # Return the canonical dimension string in sorted order
                 sorted_dims = sorted(perm)
-                results.append({
-                    "box_dimension": f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}",
-                    "packers": boxes_arrangement_json([packer], layer_tol) if debug else None,
-                    "unfit_items": []
-                })
+                results.append(
+                    {
+                        "box_dimension": f"{sorted_dims[0] + box_offset}x{sorted_dims[1] + box_offset}x{sorted_dims[2] + box_offset}*1",
+                        "packers": boxes_arrangement_json(packer, layer_tol),
+                    }
+                )
                 return results
-            
+
     # ---- Greedy multi-box fallback with the largest box ----
     multi_str, multi_packers, unfitItems, last_box_items = greedy_pack_into_biggest_box(
         item_instances, boxes, debug=debug, box_offset=box_offset
@@ -1115,25 +1139,51 @@ def choose_container(
             flat_height=flat_height,
             box_offset=box_offset,
             mailer_offset=mailer_offset,
-            results=results
+            results=results,
+            first=False,
         )
 
-    results.append({
-        "box_dimension": multi_str,
-        "packers": boxes_arrangement_json(multi_packers, layer_tol),
-        "unfit_items": unfitItems
-    })
+    results.append(
+        {
+            "box_dimension": multi_str,
+            "packers": boxes_arrangement_json(multi_packers, layer_tol),
+        }
+    )
+    for inst in unfitItems:
+        results.append(
+            {
+                "box_dimension": f"{inst.get('dimension')}*1",
+                "packers": [
+                    [
+                        {
+                            "id": inst.get("id"),
+                            "box": -1,
+                            "step": 1,
+                            "x": 0,
+                            "y": 0,
+                            "z": 0,
+                            "w": 0,
+                            "l": 0,
+                            "h": 0,
+                            "orientation": "x-long",
+                        }
+                    ]
+                ]
+            }
+        )
 
-    # return multi_str, multi_packers, unfitItems
     return results
 
 
 def _dim_to_str(dims: Tuple[float, float, float]) -> str:
     """Format dims back to 'WxHxD' with ints when values are integral."""
+
     def fmt(x: float) -> str:
         xi = int(round(x))
         return str(xi) if abs(x - xi) < 1e-6 else f"{x:g}"
+
     return "x".join(fmt(v) for v in dims)
+
 
 def summarize_item_instances(instances: List["ItemInstance"]) -> List[Dict[str, Any]]:
     """
@@ -1159,6 +1209,7 @@ def summarize_item_instances(instances: List["ItemInstance"]) -> List[Dict[str, 
     # Optional: stable ordering
     out.sort(key=lambda d: (d["id"], d["dimension"]))
     return out
+
 
 def iter_bins(packer):
     """Return a list of bins from a py3dbp Packer across versions."""

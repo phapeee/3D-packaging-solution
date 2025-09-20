@@ -1,5 +1,5 @@
 # main.py
-# from __future__ import annotations
+# 
 
 from typing import List, Dict, Any
 from flask import Flask, request, jsonify
@@ -123,7 +123,7 @@ def solve():
             box_offset=payload["box_offset"],
             mailer_offset=payload["mailer_offset"],
         )
-        return results
+        return jsonify(results)
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
